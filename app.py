@@ -24,40 +24,47 @@ eval_net.trans.gated = True
 eval_net.trans.gated2 = True
 
 def process_image(input_img,score,model_path,gamma,alpha_s=1.0,alpha_i=1.0):
-    torch.set_grad_enabled(False)
-    eval_net.load_state_dict(torch.load(os.path.join(directory,model_path), map_location=lambda storage, loc: storage))
-    eval_net.eval()
-    
-    pil2tensor = transforms.Compose([transforms.ToTensor()])
-    input = pil2tensor(input_img)
-    factor = 8
-    h, w = input.shape[1], input.shape[2]
-    H, W = ((h + factor) // factor) * factor, ((w + factor) // factor) * factor
-    padh = H - h if h % factor != 0 else 0
-    padw = W - w if w % factor != 0 else 0
-    input = F.pad(input.unsqueeze(0), (0,padw,0,padh), 'reflect')
-    with torch.no_grad():
-        eval_net.trans.alpha_s = alpha_s
-        eval_net.trans.alpha = alpha_i
-        if opt.cpu:
-            output = eval_net(input**gamma)
-        else:
-            output = eval_net(input.cuda()**gamma)
+    try:
+        torch.set_grad_enabled(False)
+        print(f"正在加载模型: {model_path}, gamma: {gamma}, alpha_s: {alpha_s}, alpha_i: {alpha_i}")
+        eval_net.load_state_dict(torch.load(os.path.join(directory,model_path), map_location=lambda storage, loc: storage))
+        eval_net.eval()
+        
+        pil2tensor = transforms.Compose([transforms.ToTensor()])
+        input = pil2tensor(input_img)
+        factor = 8
+        h, w = input.shape[1], input.shape[2]
+        H, W = ((h + factor) // factor) * factor, ((w + factor) // factor) * factor
+        padh = H - h if h % factor != 0 else 0
+        padw = W - w if w % factor != 0 else 0
+        input = F.pad(input.unsqueeze(0), (0,padw,0,padh), 'reflect')
+        with torch.no_grad():
+            eval_net.trans.alpha_s = alpha_s
+            eval_net.trans.alpha = alpha_i
+            if opt.cpu:
+                output = eval_net(input**gamma)
+            else:
+                output = eval_net(input.cuda()**gamma)
             
-    if opt.cpu:
-        output = torch.clamp(output,0,1)
-    else:
-        output = torch.clamp(output.cuda(),0,1).cuda()
-    output = output[:, :, :h, :w]
-    enhanced_img = transforms.ToPILImage()(output.squeeze(0))
-    if score == 'Yes':
-        im1 = enhanced_img.convert('RGB')
-        score_brisque = brisque.score(im1) 
-        im1 = np.array(im1)
-        score_niqe = calculate_niqe(im1)
-        return enhanced_img,score_niqe,score_brisque
-    else:
-        return enhanced_img,0,0
+        if opt.cpu:
+            output = torch.clamp(output,0,1)
+        else:
+            output = torch.clamp(output.cuda(),0,1).cuda()
+        output = output[:, :, :h, :w]
+        enhanced_img = transforms.ToPILImage()(output.squeeze(0))
+        if score == 'Yes':
+            im1 = enhanced_img.convert('RGB')
+            score_brisque = brisque.score(im1) 
+            im1 = np.array(im1)
+            score_niqe = calculate_niqe(im1)
+            return enhanced_img,score_niqe,score_brisque
+        else:
+            return enhanced_img,0,0
+    except Exception as e:
+        print(f"处理图像时出错: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None, str(e), str(e)
 
 def find_pth_files(directory):
     pth_files = []
@@ -101,4 +108,4 @@ interface = gr.Interface(
     allow_flagging="never"
 )
 
-interface.launch(server_port=7862)
+interface.launch(server_port=7862, share=True, debug=True)
