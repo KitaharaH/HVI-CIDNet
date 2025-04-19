@@ -44,3 +44,6 @@ def get_SICE_eval_set(data_dir):
 
 def get_eval_set(data_dir):
     return DatasetFromFolderEval(data_dir, transform=transform2())
+
+def get_lmot_training_set(low_dir, high_dir, size):
+    return LMOTDatasetFromFolder(low_dir, high_dir, transform=transform1(size))

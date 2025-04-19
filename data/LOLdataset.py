@@ -1,4 +1,3 @@
-
 import os
 import random
 import torch
@@ -109,6 +108,48 @@ class LOLv2SynDatasetFromFolder(data.Dataset):
 
     def __len__(self):
         return 900
+
+
+
+class LMOTDatasetFromFolder(data.Dataset):
+    def __init__(self, low_dir, high_dir, transform=None):
+        super(LMOTDatasetFromFolder, self).__init__()
+        self.low_dir = low_dir
+        self.high_dir = high_dir
+        self.transform = transform
+        self.norm = t.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        
+        # 获取低光图像文件列表
+        self.low_filenames = [join(low_dir, x) for x in listdir(low_dir) if is_image_file(x)]
+        # 获取高光图像文件列表
+        self.high_filenames = [join(high_dir, x) for x in listdir(high_dir) if is_image_file(x)]
+        
+        # 确保文件列表长度相同
+        assert len(self.low_filenames) == len(self.high_filenames), "低光和高光图像数量不匹配"
+
+    def __getitem__(self, index):
+        # 加载低光和高光图像
+        im1 = load_img(self.low_filenames[index])
+        im2 = load_img(self.high_filenames[index])
+        
+        # 获取文件名
+        _, file1 = os.path.split(self.low_filenames[index])
+        _, file2 = os.path.split(self.high_filenames[index])
+        
+        # 应用相同的随机变换
+        seed = random.randint(1, 1000000)
+        seed = np.random.randint(seed) # 使用numpy生成随机种子
+        if self.transform:
+            random.seed(seed) # 应用种子到图像变换
+            torch.manual_seed(seed) # 需要 torchvision 0.7
+            im1 = self.transform(im1)
+            random.seed(seed)
+            torch.manual_seed(seed)         
+            im2 = self.transform(im2) 
+        return im1, im2, file1, file2
+
+    def __len__(self):
+        return len(self.low_filenames)
 
 
 

@@ -1,17 +1,17 @@
-arch==5.3.1
-image_quality==1.2.7
-lpips==0.1.4
-matplotlib==3.5.3
+arch
+image_quality
+lpips
+matplotlib
 numpy
-opencv_contrib_python==4.7.0.72
-Pillow==9.5.0
-scipy==1.7.3
+opencv_contrib_python
+# Pillow==9.5.0
+scipy
 thop
 torch
 torchvision
-tqdm==4.65.0
-einops==0.6.1
-lpips==0.1.4
+tqdm
+einops
+lpips
 opencv-python
 gradio
 huggingface_hub

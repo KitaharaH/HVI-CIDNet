@@ -6,8 +6,7 @@ from data.data import *
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from loss.losses import *
-# from net.CIDNet import CIDNet
-from net.CIDNet_MSSA import CIDNet
+from net.CIDNet_TNSM import CIDNet_TNSM
 
 eval_parser = argparse.ArgumentParser(description='Eval')
 eval_parser.add_argument('--perc', action='store_true', help='trained with perceptual loss')
@@ -16,7 +15,6 @@ eval_parser.add_argument('--lol_v2_real', action='store_true', help='output lol_
 eval_parser.add_argument('--lol_v2_syn', action='store_true', help='output lol_v2_syn dataset')
 eval_parser.add_argument('--SICE_grad', action='store_true', help='output SICE_grad dataset')
 eval_parser.add_argument('--SICE_mix', action='store_true', help='output SICE_mix dataset')
-eval_parser.add_argument('--lmot', action='store_true', help='output lmot dataset')
 
 eval_parser.add_argument('--best_GT_mean', action='store_true', help='output lol_v2_real dataset best_GT_mean')
 eval_parser.add_argument('--best_PSNR', action='store_true', help='output lol_v2_real dataset best_PSNR')
@@ -36,73 +34,78 @@ eval_parser.add_argument('--unpaired_weights', type=str, default='./weights/LOLv
 
 ep = eval_parser.parse_args()
 
-
-def eval(model, testing_data_loader, model_path, output_folder,norm_size=True,LOL=False,v2=False,unpaired=False,alpha=1.0,gamma=1.0,lmot=False):
+def eval_tnsm(model, testing_data_loader, model_path, output_folder, norm_size=True, LOL=False, v2=False, unpaired=False, alpha=1.0, gamma=1.0):
     torch.set_grad_enabled(False)
-    model.load_state_dict(torch.load(model_path, map_location=lambda storage, loc: storage))
+    pretrained_dict = torch.load(model_path, map_location=lambda storage, loc: storage)
+    model_dict = model.state_dict()
+    pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict and v.shape == model_dict[k].shape}
+    model_dict.update(pretrained_dict)
+    model.load_state_dict(model_dict, strict=False)
     print('Pre-trained model is loaded.')
     model.eval()
     print('Evaluation:')
-    if LOL:
-        model.trans.gated = True
-    elif v2:
-        model.trans.gated2 = True
-        model.trans.alpha = alpha
-    elif unpaired:
-        model.trans.gated2 = True
-        model.trans.alpha = alpha
-    elif lmot:
-        model.trans.gated = True  # 使用与 LOL v1 相同的设置，您可以根据需要调整
+    if hasattr(model, 'trans'):
+        if LOL:
+            model.trans.gated = True
+        elif v2:
+            model.trans.gated2 = True
+            model.trans.alpha = alpha
+        elif unpaired:
+            model.trans.gated2 = True
+            model.trans.alpha = alpha
+    else:
+        print("Warning: Model does not have 'trans' attribute. Skipping gated/alpha logic.")
+
     for batch in tqdm(testing_data_loader):
         with torch.no_grad():
             if norm_size:
-                input, name = batch[0], batch[1]
+                input_img, name = batch[0], batch[1]
             else:
-                input, name, h, w = batch[0], batch[1], batch[2], batch[3]
-            
-            input = input.cuda()
-            output = model(input**gamma) 
-            
-        if not os.path.exists(output_folder):          
-            os.mkdir(output_folder)  
-            
-        output = torch.clamp(output.cuda(),0,1).cuda()
+                input_img, name, h, w = batch[0], batch[1], batch[2], batch[3]
+
+            input_img = input_img.cuda()
+            output, _ = model(input_img**gamma)
+
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder, exist_ok=True)
+
+        output = torch.clamp(output.cuda(), 0, 1).cuda()
         if not norm_size:
             output = output[:, :, :h, :w]
-        
-        output_img = transforms.ToPILImage()(output.squeeze(0))
-        output_img.save(output_folder + name[0])
+
+        output_img = transforms.ToPILImage()(output.squeeze(0).cpu())
+        output_img.save(os.path.join(output_folder, name[0]))
         torch.cuda.empty_cache()
     print('===> End evaluation')
-    if LOL:
-        model.trans.gated = False
-    elif v2:
-        model.trans.gated2 = False
-    elif lmot:
-        model.trans.gated = False
+    if hasattr(model, 'trans'):
+        if LOL:
+            model.trans.gated = False
+        elif v2:
+            model.trans.gated2 = False
+        elif unpaired:
+            model.trans.gated2 = False
     torch.set_grad_enabled(True)
-    
+
 if __name__ == '__main__':
-    
+
     cuda = True
     if cuda and not torch.cuda.is_available():
         raise Exception("No GPU found, or need to change CUDA_VISIBLE_DEVICES number")
-    
-    if not os.path.exists('./output'):          
-            os.mkdir('./output')  
-    
+
+    if not os.path.exists('./output'):
+        os.makedirs('./output', exist_ok=True)
+
     norm_size = True
     num_workers = 1
     alpha = None
     if ep.lol:
-        eval_data = DataLoader(dataset=get_eval_set("./datasets/LOLdataset/eval15/low"), num_workers=num_workers, batch_size=1, shuffle=False)
+        eval_data = DataLoader(dataset=get_eval_set("/home/ubuntu/lmot_lol_val/img_dark_rgb"), num_workers=num_workers, batch_size=1, shuffle=False)
         output_folder = './output/LOLv1/'
         if ep.perc:
-            weight_path = './weights/LOLv1/w_perc.pth'
+            weight_path = './weights/train/epoch_20.pth'
         else:
-            weight_path = './weights/LOLv1/wo_perc.pth'
-        
-            
+            weight_path = './weights/train/epoch_20.pth'
+
     elif ep.lol_v2_real:
         eval_data = DataLoader(dataset=get_eval_set("./datasets/LOLv2/Real_captured/Test/Low"), num_workers=num_workers, batch_size=1, shuffle=False)
         output_folder = './output/LOLv2_real/'
@@ -115,7 +118,13 @@ if __name__ == '__main__':
         elif ep.best_SSIM:
             weight_path = './weights/LOLv2_real/best_SSIM.pth'
             alpha = 0.82
-            
+        elif ep.perc:
+            weight_path = './weights/LOLv2_real/w_perc.pth'
+            alpha = 0.8
+        else:
+            weight_path = './weights/LOLv2_real/wo_perc.pth'
+            alpha = 0.8
+
     elif ep.lol_v2_syn:
         eval_data = DataLoader(dataset=get_eval_set("./datasets/LOLv2/Synthetic/Test/Low"), num_workers=num_workers, batch_size=1, shuffle=False)
         output_folder = './output/LOLv2_syn/'
@@ -123,28 +132,20 @@ if __name__ == '__main__':
             weight_path = './weights/LOLv2_syn/w_perc.pth'
         else:
             weight_path = './weights/LOLv2_syn/wo_perc.pth'
-            
+
     elif ep.SICE_grad:
         eval_data = DataLoader(dataset=get_SICE_eval_set("./datasets/SICE/SICE_Grad"), num_workers=num_workers, batch_size=1, shuffle=False)
         output_folder = './output/SICE_grad/'
         weight_path = './weights/SICE.pth'
         norm_size = False
-        
+
     elif ep.SICE_mix:
         eval_data = DataLoader(dataset=get_SICE_eval_set("./datasets/SICE/SICE_Mix"), num_workers=num_workers, batch_size=1, shuffle=False)
         output_folder = './output/SICE_mix/'
         weight_path = './weights/SICE.pth'
         norm_size = False
-    
-    elif ep.lmot:
-        eval_data = DataLoader(dataset=get_eval_set("/root/autodl-tmp/lmot_lol_val/img_dark_rgb"), num_workers=num_workers, batch_size=1, shuffle=False)
-        output_folder = './output/LMOT/'
-        if ep.perc:
-            weight_path = '/root/HVI-CIDNet/weights/MSSA_P1en2/epoch_30.pth'
-        else:
-            weight_path = './weights/LMOT/wo_perc.pth'
-    
-    elif ep.unpaired: 
+
+    elif ep.unpaired:
         if ep.DICM:
             eval_data = DataLoader(dataset=get_SICE_eval_set("./datasets/DICM"), num_workers=num_workers, batch_size=1, shuffle=False)
             output_folder = './output/DICM/'
@@ -163,10 +164,15 @@ if __name__ == '__main__':
         elif ep.custome:
             eval_data = DataLoader(dataset=get_SICE_eval_set(ep.custome_path), num_workers=num_workers, batch_size=1, shuffle=False)
             output_folder = './output/custome/'
+        else:
+            raise ValueError("Please specify an unpaired dataset (e.g., --DICM, --LIME, etc.) when using --unpaired.")
+
         alpha = ep.alpha
         norm_size = False
         weight_path = ep.unpaired_weights
-        
-    eval_net = CIDNet().cuda()
-    eval(eval_net, eval_data, weight_path, output_folder,norm_size=norm_size,LOL=ep.lol,v2=ep.lol_v2_real,unpaired=ep.unpaired,alpha=alpha,gamma=ep.gamma,lmot=ep.lmot)
 
+    else:
+        raise ValueError("Please specify a dataset to evaluate (e.g., --lol, --lol_v2_real, --unpaired --DICM, etc.).")
+
+    eval_net = CIDNet_TNSM().cuda()
+    eval_tnsm(eval_net, eval_data, weight_path, output_folder, norm_size=norm_size, LOL=ep.lol, v2=ep.lol_v2_real, unpaired=ep.unpaired, alpha=alpha, gamma=ep.gamma)

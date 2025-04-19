@@ -17,6 +17,7 @@ mea_parser.add_argument('--lol_v2_real', action='store_true', help='measure lol_
 mea_parser.add_argument('--lol_v2_syn', action='store_true', help='measure lol_v2_syn dataset')
 mea_parser.add_argument('--SICE_grad', action='store_true', help='measure SICE_grad dataset')
 mea_parser.add_argument('--SICE_mix', action='store_true', help='measure SICE_mix dataset')
+mea_parser.add_argument('--lmot', action='store_true', help='measure lmot dataset')
 mea = mea_parser.parse_args()
 
 def ssim(prediction, target):
@@ -76,6 +77,14 @@ def metrics(im_dir, label_dir, use_GT_mean):
     n = 0
     loss_fn = lpips.LPIPS(net='alex')
     loss_fn.cuda()
+    
+    # 检查label_dir路径末尾是否有斜杠，如果没有则添加
+    if not label_dir.endswith('/'):
+        label_dir += '/'
+    
+    # 检查是否为LMOT数据集
+    is_lmot = 'lmot_lol_val/img_light_rgb' in label_dir
+    
     for item in tqdm(sorted(glob.glob(im_dir))):
         n += 1
         
@@ -88,8 +97,39 @@ def metrics(im_dir, label_dir, use_GT_mean):
             name = item.split('/')[-1]
         else:
             name = item.split('/')[-1]
+        
+        # 获取文件名（不含扩展名）
+        name_without_ext = os.path.splitext(name)[0]
+        
+        # LMOT数据集特别处理 - 直接使用.jpg扩展名
+        if is_lmot:
+            ref_path = label_dir + name_without_ext + '.jpg'
+            if os.path.exists(ref_path):
+                im2 = Image.open(ref_path).convert('RGB')
+            else:
+                print(f"警告: 在 {label_dir} 中找不到图像 {name_without_ext}.jpg")
+                continue
+        else:
+            # 其他数据集处理
+            # 尝试不同的扩展名打开图片
+            if os.path.exists(label_dir + name):
+                im2 = Image.open(label_dir + name).convert('RGB')
+            elif os.path.exists(label_dir + name_without_ext + '.jpg'):
+                im2 = Image.open(label_dir + name_without_ext + '.jpg').convert('RGB')
+            elif os.path.exists(label_dir + name_without_ext + '.JPG'):
+                im2 = Image.open(label_dir + name_without_ext + '.JPG').convert('RGB')
+            elif os.path.exists(label_dir + name_without_ext + '.jpeg'):
+                im2 = Image.open(label_dir + name_without_ext + '.jpeg').convert('RGB')
+            elif os.path.exists(label_dir + name_without_ext + '.JPEG'):
+                im2 = Image.open(label_dir + name_without_ext + '.JPEG').convert('RGB')
+            elif os.path.exists(label_dir + name_without_ext + '.png'):
+                im2 = Image.open(label_dir + name_without_ext + '.png').convert('RGB')
+            elif os.path.exists(label_dir + name_without_ext + '.PNG'):
+                im2 = Image.open(label_dir + name_without_ext + '.PNG').convert('RGB')
+            else:
+                print(f"警告: 在 {label_dir} 中找不到参考图像 {name}")
+                continue
             
-        im2 = Image.open(label_dir + name).convert('RGB')
         (h, w) = im2.size
         im1 = im1.resize((h, w))  
         im1 = np.array(im1) 
@@ -113,6 +153,9 @@ def metrics(im_dir, label_dir, use_GT_mean):
         avg_lpips += score_lpips.item()
         torch.cuda.empty_cache()
     
+    if n == 0:
+        print(f"错误: 未能成功评估任何图像!")
+        return 0, 0, 0
 
     avg_psnr = avg_psnr / n
     avg_ssim = avg_ssim / n
@@ -137,8 +180,11 @@ if __name__ == '__main__':
     if mea.SICE_mix:
         im_dir = './output/SICE_mix/*.png'
         label_dir = './datasets/SICE/SICE_Reshape/'
+    if mea.lmot:
+        im_dir = './output/LMOT/*.png'
+        label_dir = '/root/autodl-tmp/lmot_lol_val/img_light_rgb'
 
     avg_psnr, avg_ssim, avg_lpips = metrics(im_dir, label_dir, mea.use_GT_mean)
-    print("===> Avg.PSNR: {:.4f} dB ".format(avg_psnr))
-    print("===> Avg.SSIM: {:.4f} ".format(avg_ssim))
-    print("===> Avg.LPIPS: {:.4f} ".format(avg_lpips))
+    print("===> 平均PSNR: {:.4f} dB ".format(avg_psnr))
+    print("===> 平均SSIM: {:.4f} ".format(avg_ssim))
+    print("===> 平均LPIPS: {:.4f} ".format(avg_lpips))

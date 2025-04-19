@@ -6,11 +6,10 @@ import torch.optim as optim
 import torch.backends.cudnn as cudnn
 import numpy as np
 from torch.utils.data import DataLoader
-# from net.CIDNet import CIDNet
-from net.CIDNet_MSSA import CIDNet
+from net.CIDNet_TNSM import CIDNet_TNSM
 from data.options import option
 from measure import metrics
-from eval import eval
+from eval_tnsm import eval_tnsm
 from data.data import *
 from loss.losses import *
 from data.scheduler import *
@@ -53,16 +52,25 @@ def train(epoch):
         # use random gamma function (enhancement curve) to improve generalization
         if opt.gamma:
             gamma = random.randint(opt.start_gamma,opt.end_gamma) / 100.0
-            output_rgb = model(im1 ** gamma)  
+            output_rgb, noise_map = model(im1 ** gamma)  
         else:
-            output_rgb = model(im1)  
+            output_rgb, noise_map = model(im1)  
             
         gt_rgb = im2
         output_hvi = model.HVIT(output_rgb)
         gt_hvi = model.HVIT(gt_rgb)
+        
+        # 计算基础损失
         loss_hvi = L1_loss(output_hvi, gt_hvi) + D_loss(output_hvi, gt_hvi) + E_loss(output_hvi, gt_hvi) + opt.P_weight * P_loss(output_hvi, gt_hvi)[0]
         loss_rgb = L1_loss(output_rgb, gt_rgb) + D_loss(output_rgb, gt_rgb) + E_loss(output_rgb, gt_rgb) + opt.P_weight * P_loss(output_rgb, gt_rgb)[0]
-        loss = loss_rgb + opt.HVI_weight * loss_hvi
+        
+        # 计算噪声图相关损失
+        noise_consistency_loss = torch.mean(torch.abs(noise_map - (1.0 - F.sigmoid(torch.mean(torch.abs(output_rgb - im1), dim=1, keepdim=True)))))
+        noise_smoothing_loss = torch.mean(torch.abs(noise_map[:, :, :, :-1] - noise_map[:, :, :, 1:])) + torch.mean(torch.abs(noise_map[:, :, :-1, :] - noise_map[:, :, 1:, :]))
+        
+        # 组合总损失
+        loss = loss_rgb + opt.HVI_weight * loss_hvi + opt.tnsm_weight * (noise_consistency_loss + noise_smoothing_loss)
+        
         iter += 1
         
         if opt.grad_clip:
@@ -156,7 +164,7 @@ def load_datasets():
 
 def build_model():
     print('===> Building model ')
-    model = CIDNet().cuda()
+    model = CIDNet_TNSM().cuda()
     if opt.start_epoch > 0:
         pth = f"./weights/train/epoch_{opt.start_epoch}.pth"
         model.load_state_dict(torch.load(pth, map_location=lambda storage, loc: storage))
@@ -251,15 +259,14 @@ if __name__ == '__main__':
                 output_folder = 'SICE_grad/'
                 label_dir = opt.data_valgt_SICE_grad
                 norm_size = False
-                
             if opt.lmot:
                 output_folder = 'LMOT/'
                 label_dir = opt.data_valgt_lmot
                 norm_size = True
 
             im_dir = opt.val_folder + output_folder + '*.png'
-            eval(model, testing_data_loader, model_out_path, opt.val_folder+output_folder, 
-                 norm_size=norm_size, LOL=opt.lol_v1, v2=opt.lolv2_real, alpha=0.8, lmot=opt.lmot)
+            eval_tnsm(model, testing_data_loader, model_out_path, opt.val_folder+output_folder, 
+                 norm_size=norm_size, LOL=opt.lol_v1, v2=opt.lolv2_real, alpha=0.8)
             
             avg_psnr, avg_ssim, avg_lpips = metrics(im_dir, label_dir, use_GT_mean=False)
             print("===> Avg.PSNR: {:.4f} dB ".format(avg_psnr))
@@ -284,8 +291,8 @@ if __name__ == '__main__':
         f.write(f"D_weight: {opt.D_weight}\n")  
         f.write(f"E_weight: {opt.E_weight}\n")  
         f.write(f"P_weight: {opt.P_weight}\n")  
+        f.write(f"TNSM_weight: {opt.tnsm_weight}\n")  
         f.write("| Epochs | PSNR | SSIM | LPIPS |\n")  
         f.write("|----------------------|----------------------|----------------------|----------------------|\n")  
         for i in range(len(psnr)):
             f.write(f"| {opt.start_epoch+(i+1)*opt.snapshots} | { psnr[i]:.4f} | {ssim[i]:.4f} | {lpips[i]:.4f} |\n")  
-        
