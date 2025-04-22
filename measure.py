@@ -188,3 +188,5 @@ if __name__ == '__main__':
     print("===> 平均PSNR: {:.4f} dB ".format(avg_psnr))
     print("===> 平均SSIM: {:.4f} ".format(avg_ssim))
     print("===> 平均LPIPS: {:.4f} ".format(avg_lpips))
+
+# python measure.py --lmot

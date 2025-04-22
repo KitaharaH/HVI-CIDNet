@@ -7,7 +7,13 @@ import torch.backends.cudnn as cudnn
 import numpy as np
 from torch.utils.data import DataLoader
 # from net.CIDNet import CIDNet
-from net.CIDNet_MSSA import CIDNet
+# from net.CIDNet_MSSA import CIDNet
+# from net.CIDNet_Dynamic import CIDNet
+# from net.CIDNet_PSwoMSSA import CIDNet
+# from net.CIDNet_contmix import CIDNet
+# from net.CIDNet_v2 import CIDNet
+# from net.CIDNet_HF import CIDNet
+from net.cidnet_freq import CIDNet
 from data.options import option
 from measure import metrics
 from eval import eval

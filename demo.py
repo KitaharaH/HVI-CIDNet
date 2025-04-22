@@ -2,16 +2,18 @@ import numpy as np
 import torch
 import argparse
 from PIL import Image
-from net.CIDNet import CIDNet
+# from net.CIDNet import CIDNet
+# from net.CIDNet_MSSA import CIDNet
+from net.CIDNet_PixelShuffle import CIDNet
 import torchvision.transforms as transforms
 import torch.nn.functional as F
 import os
 
 # 参数设置
 parser = argparse.ArgumentParser(description='HVI-CIDNet推理')
-parser.add_argument('--input', type=str, required=True, help='输入图片路径')
-parser.add_argument('--output_dir', type=str, default='output', help='输出目录')
-parser.add_argument('--weight', type=str, default='weights/SICE.pth', help='权重文件路径')
+parser.add_argument('--input', type=str, default='/root/autodl-tmp/LMOT_DARK_YOLO/images/train/LMOT-02_000001.png', help='输入图片路径')
+parser.add_argument('--output_dir', type=str, default='output/demo', help='输出目录')
+parser.add_argument('--weight', type=str, default='/root/HVI-CIDNet/weights/PixelShuffle_P1en2/epoch_10.pth', help='权重文件路径')
 parser.add_argument('--gamma', type=float, default=1.0, help='gamma曲线参数，越低越亮')
 parser.add_argument('--alpha_s', type=float, default=1.0, help='饱和度参数，越高越饱和')
 parser.add_argument('--alpha_i', type=float, default=1.0, help='亮度参数，越高越亮')

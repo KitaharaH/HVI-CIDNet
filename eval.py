@@ -7,7 +7,10 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from loss.losses import *
 # from net.CIDNet import CIDNet
-from net.CIDNet_MSSA import CIDNet
+# from net.CIDNet_MSSA import CIDNet
+# from net.CIDNet_PixelShuffle import CIDNet
+from net.CIDNet_PSwoMSSA import CIDNet
+from net.CIDNet_Dynamic import CIDNet
 
 eval_parser = argparse.ArgumentParser(description='Eval')
 eval_parser.add_argument('--perc', action='store_true', help='trained with perceptual loss')
@@ -140,7 +143,7 @@ if __name__ == '__main__':
         eval_data = DataLoader(dataset=get_eval_set("/root/autodl-tmp/lmot_lol_val/img_dark_rgb"), num_workers=num_workers, batch_size=1, shuffle=False)
         output_folder = './output/LMOT/'
         if ep.perc:
-            weight_path = '/root/HVI-CIDNet/weights/MSSA_P1en2/epoch_30.pth'
+            weight_path = '/root/HVI-CIDNet/weights/dynamic/epoch_20.pth'
         else:
             weight_path = './weights/LMOT/wo_perc.pth'
     
@@ -170,3 +173,4 @@ if __name__ == '__main__':
     eval_net = CIDNet().cuda()
     eval(eval_net, eval_data, weight_path, output_folder,norm_size=norm_size,LOL=ep.lol,v2=ep.lol_v2_real,unpaired=ep.unpaired,alpha=alpha,gamma=ep.gamma,lmot=ep.lmot)
 
+# python eval.py --lmot --perc

@@ -65,7 +65,10 @@ def train(epoch):
         loss_rgb = L1_loss(output_rgb, gt_rgb) + D_loss(output_rgb, gt_rgb) + E_loss(output_rgb, gt_rgb) + opt.P_weight * P_loss(output_rgb, gt_rgb)[0]
         
         # 计算噪声图相关损失
-        noise_consistency_loss = torch.mean(torch.abs(noise_map - (1.0 - F.sigmoid(torch.mean(torch.abs(output_rgb - im1), dim=1, keepdim=True)))))
+        with torch.no_grad():
+            reconstruction_error_map = torch.mean(torch.abs(output_rgb - im1), dim=1, keepdim=True)
+            noise_target = torch.sigmoid(reconstruction_error_map) 
+        noise_consistency_loss = F.l1_loss(noise_map, noise_target)
         noise_smoothing_loss = torch.mean(torch.abs(noise_map[:, :, :, :-1] - noise_map[:, :, :, 1:])) + torch.mean(torch.abs(noise_map[:, :, :-1, :] - noise_map[:, :, 1:, :]))
         
         # 组合总损失
