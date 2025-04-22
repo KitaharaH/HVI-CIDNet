@@ -57,7 +57,8 @@ def option():
     parser.add_argument('--L1_weight', type=float, default=1.0)
     parser.add_argument('--D_weight',  type=float, default=0.5)
     parser.add_argument('--E_weight',  type=float, default=50.0)
-    parser.add_argument('--P_weight',  type=float, default=1e-2)
+    # parser.add_argument('--P_weight',  type=float, default=1e-2)
+    parser.add_argument('--P_weight',  type=float, default=0.0)
     parser.add_argument('--tnsm_weight', type=float, default=1, help='Weight for TNSM specific losses (consistency and smoothing)')
     
     # use random gamma function (enhancement curve) to improve generalization

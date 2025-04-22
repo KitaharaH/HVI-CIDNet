@@ -13,7 +13,9 @@ from torch.utils.data import DataLoader
 # from net.CIDNet_contmix import CIDNet
 # from net.CIDNet_v2 import CIDNet
 # from net.CIDNet_HF import CIDNet
-from net.cidnet_freq import CIDNet
+# from net.cidnet_freq import CIDNet
+from net.CIDNet_EMA import CIDNet
+# from net.CIDNet_AST import CIDNet
 from data.options import option
 from measure import metrics
 from eval import eval
